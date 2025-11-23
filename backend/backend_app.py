@@ -2,6 +2,7 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_swagger_ui import get_swaggerui_blueprint
 import os
+import json
 
 # Get the directory of the current file (backend/)
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -26,10 +27,48 @@ swagger_ui_blueprint = get_swaggerui_blueprint(
 )
 app.register_blueprint(swagger_ui_blueprint, url_prefix=SWAGGER_URL)
 
-POSTS = [
+# JSON file path for persistent storage
+POSTS_FILE = os.path.join(os.path.dirname(__file__), 'posts.json')
+
+# Default posts data
+DEFAULT_POSTS = [
     {"id": 1, "title": "First post", "content": "This is the first post."},
     {"id": 2, "title": "Second post", "content": "This is the second post."},
 ]
+
+def load_posts():
+    """Load posts from JSON file. Create file with default data if it doesn't exist."""
+    try:
+        if os.path.exists(POSTS_FILE):
+            with open(POSTS_FILE, 'r', encoding='utf-8') as file:
+                posts = json.load(file)
+                return posts
+        else:
+            # File doesn't exist, create it with default data
+            save_posts(DEFAULT_POSTS)
+            return DEFAULT_POSTS.copy()
+    except json.JSONDecodeError as e:
+        print(f"Error: Invalid JSON in {POSTS_FILE}: {e}")
+        print("Using default posts data.")
+        return DEFAULT_POSTS.copy()
+    except Exception as e:
+        print(f"Error loading posts: {e}")
+        return DEFAULT_POSTS.copy()
+
+def save_posts(posts):
+    """Save posts to JSON file with error handling."""
+    try:
+        with open(POSTS_FILE, 'w', encoding='utf-8') as file:
+            json.dump(posts, file, indent=2, ensure_ascii=False)
+    except Exception as e:
+        print(f"Error saving posts to {POSTS_FILE}: {e}")
+        raise
+
+def get_next_id(posts):
+    """Generate the next available ID for a new post."""
+    if not posts:
+        return 1
+    return max(post['id'] for post in posts) + 1
 
 
 @app.route('/api/posts', methods=['GET'])
@@ -46,12 +85,15 @@ def get_posts():
     if direction and direction not in ['asc', 'desc']:
         return jsonify({"error": "Invalid direction. Must be 'asc' or 'desc'"}), 400
     
+    # Load posts from file
+    posts = load_posts()
+    
     # If no sorting parameters provided, return posts in original order
     if not sort_by:
-        return jsonify(POSTS)
+        return jsonify(posts)
     
     # Create a copy of posts to sort
-    sorted_posts = POSTS.copy()
+    sorted_posts = posts.copy()
     
     # Sort the posts
     reverse = direction == 'desc'
@@ -73,8 +115,11 @@ def add_post():
     if not title or not content:
         return jsonify({"error": "Both 'title' and 'content' must be non-empty"}), 400
     
+    # Load current posts
+    posts = load_posts()
+    
     # Generate new unique ID
-    new_id = max(post['id'] for post in POSTS) + 1 if POSTS else 1
+    new_id = get_next_id(posts)
     
     new_post = {
         "id": new_id,
@@ -82,16 +127,24 @@ def add_post():
         "content": content
     }
     
-    POSTS.append(new_post)
+    # Add new post and save to file
+    posts.append(new_post)
+    try:
+        save_posts(posts)
+    except Exception as e:
+        return jsonify({"error": "Failed to save post"}), 500
     
     return jsonify(new_post), 201
 
 
 @app.route('/api/posts/<int:post_id>', methods=['DELETE'])
 def delete_post(post_id):
+    # Load current posts
+    posts = load_posts()
+    
     # Find the post with the given ID
     post_to_delete = None
-    for post in POSTS:
+    for post in posts:
         if post['id'] == post_id:
             post_to_delete = post
             break
@@ -100,16 +153,25 @@ def delete_post(post_id):
         return jsonify({"error": f"Post with id {post_id} not found"}), 404
     
     # Remove the post from the list
-    POSTS.remove(post_to_delete)
+    posts.remove(post_to_delete)
+    
+    # Save updated posts to file
+    try:
+        save_posts(posts)
+    except Exception as e:
+        return jsonify({"error": "Failed to delete post"}), 500
     
     return jsonify({"message": f"Post with id {post_id} has been deleted successfully."}), 200
 
 
 @app.route('/api/posts/<int:post_id>', methods=['PUT'])
 def update_post(post_id):
+    # Load current posts
+    posts = load_posts()
+    
     # Find the post with the given ID
     post_to_update = None
-    for post in POSTS:
+    for post in posts:
         if post['id'] == post_id:
             post_to_update = post
             break
@@ -132,6 +194,12 @@ def update_post(post_id):
             if content:  # Only update if not empty
                 post_to_update['content'] = content
     
+    # Save updated posts to file
+    try:
+        save_posts(posts)
+    except Exception as e:
+        return jsonify({"error": "Failed to update post"}), 500
+    
     return jsonify(post_to_update), 200
 
 
@@ -145,9 +213,12 @@ def search_posts():
     if not title_query and not content_query:
         return jsonify([])
     
+    # Load posts from file
+    posts = load_posts()
+    
     # Filter posts that match the search criteria
     matching_posts = []
-    for post in POSTS:
+    for post in posts:
         title_match = title_query and title_query in post['title'].lower()
         content_match = content_query and content_query in post['content'].lower()
         
