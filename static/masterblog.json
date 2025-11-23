@@ -1,0 +1,488 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Masterblog API",
+    "description": "A RESTful API for managing blog posts with full CRUD operations, search, and sorting functionality",
+    "version": "1.0.0",
+    "contact": {
+      "name": "Masterblog API Support",
+      "email": "support@masterblog.com"
+    },
+    "license": {
+      "name": "MIT",
+      "url": "https://opensource.org/licenses/MIT"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:5002",
+      "description": "Development server"
+    }
+  ],
+  "components": {
+    "schemas": {
+      "Post": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Unique identifier for the post",
+            "example": 1
+          },
+          "title": {
+            "type": "string",
+            "description": "Title of the blog post",
+            "example": "My First Blog Post"
+          },
+          "content": {
+            "type": "string",
+            "description": "Content of the blog post",
+            "example": "This is the content of my first blog post."
+          }
+        },
+        "required": ["id", "title", "content"]
+      },
+      "CreatePostRequest": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Title of the new post",
+            "example": "My New Blog Post",
+            "minLength": 1
+          },
+          "content": {
+            "type": "string",
+            "description": "Content of the new post",
+            "example": "This is the content of my new blog post.",
+            "minLength": 1
+          }
+        },
+        "required": ["title", "content"]
+      },
+      "UpdatePostRequest": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Updated title (optional)",
+            "example": "Updated Blog Post Title",
+            "minLength": 1
+          },
+          "content": {
+            "type": "string",
+            "description": "Updated content (optional)",
+            "example": "This is the updated content.",
+            "minLength": 1
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Error message describing what went wrong",
+            "example": "Post with id 999 not found"
+          }
+        },
+        "required": ["error"]
+      },
+      "SuccessMessage": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "Success message describing the completed action",
+            "example": "Post with id 1 has been deleted successfully."
+          }
+        },
+        "required": ["message"]
+      }
+    },
+    "parameters": {
+      "PostId": {
+        "name": "post_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "description": "ID of the post",
+        "example": 1
+      },
+      "SortBy": {
+        "name": "sort",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "enum": ["title", "content"]
+        },
+        "description": "Field to sort by",
+        "example": "title"
+      },
+      "Direction": {
+        "name": "direction",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "enum": ["asc", "desc"],
+          "default": "asc"
+        },
+        "description": "Sort direction (ascending or descending)",
+        "example": "asc"
+      },
+      "TitleSearch": {
+        "name": "title",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": "Search term to find in post titles",
+        "example": "flask"
+      },
+      "ContentSearch": {
+        "name": "content",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": "Search term to find in post content",
+        "example": "python"
+      }
+    }
+  },
+  "paths": {
+    "/api/posts": {
+      "get": {
+        "summary": "List all posts",
+        "description": "Returns a list of all blog posts with optional sorting by title or content in ascending or descending order",
+        "tags": ["Posts"],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/SortBy"
+          },
+          {
+            "$ref": "#/components/parameters/Direction"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of posts retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Post"
+                  }
+                },
+                "examples": {
+                  "posts_list": {
+                    "summary": "Example list of posts",
+                    "value": [
+                      {
+                        "id": 1,
+                        "title": "First post",
+                        "content": "This is the first post."
+                      },
+                      {
+                        "id": 2,
+                        "title": "Second post",
+                        "content": "This is the second post."
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid sort parameters provided",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "invalid_sort_field": {
+                    "summary": "Invalid sort field",
+                    "value": {
+                      "error": "Invalid sort field. Must be 'title' or 'content'"
+                    }
+                  },
+                  "invalid_direction": {
+                    "summary": "Invalid sort direction",
+                    "value": {
+                      "error": "Invalid direction. Must be 'asc' or 'desc'"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a new post",
+        "description": "Creates a new blog post with the provided title and content. Both fields are required and must be non-empty.",
+        "tags": ["Posts"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePostRequest"
+              },
+              "examples": {
+                "new_post": {
+                  "summary": "Example new post",
+                  "value": {
+                    "title": "My New Blog Post",
+                    "content": "This is the content of my new blog post about Flask development."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Post created successfully with auto-generated ID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Post"
+                },
+                "examples": {
+                  "created_post": {
+                    "summary": "Newly created post",
+                    "value": {
+                      "id": 3,
+                      "title": "My New Blog Post",
+                      "content": "This is the content of my new blog post about Flask development."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request data - missing required fields or empty values",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "missing_fields": {
+                    "summary": "Missing required fields",
+                    "value": {
+                      "error": "Both 'title' and 'content' are required"
+                    }
+                  },
+                  "empty_fields": {
+                    "summary": "Empty field values",
+                    "value": {
+                      "error": "Both 'title' and 'content' must be non-empty"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/posts/{post_id}": {
+      "delete": {
+        "summary": "Delete a post",
+        "description": "Deletes a blog post by its unique ID",
+        "tags": ["Posts"],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PostId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Post deleted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessMessage"
+                },
+                "examples": {
+                  "deleted_post": {
+                    "summary": "Post deletion confirmation",
+                    "value": {
+                      "message": "Post with id 1 has been deleted successfully."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Post not found - no post exists with the provided ID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "post_not_found": {
+                    "summary": "Post not found",
+                    "value": {
+                      "error": "Post with id 999 not found"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Update a post",
+        "description": "Updates an existing blog post. Only provided fields will be updated - both title and content are optional.",
+        "tags": ["Posts"],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PostId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePostRequest"
+              },
+              "examples": {
+                "update_title_only": {
+                  "summary": "Update only the title",
+                  "value": {
+                    "title": "Updated Blog Post Title"
+                  }
+                },
+                "update_content_only": {
+                  "summary": "Update only the content",
+                  "value": {
+                    "content": "This is the updated content of the blog post."
+                  }
+                },
+                "update_both": {
+                  "summary": "Update both title and content",
+                  "value": {
+                    "title": "Completely Updated Post",
+                    "content": "This post has been completely updated with new title and content."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Post updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Post"
+                },
+                "examples": {
+                  "updated_post": {
+                    "summary": "Successfully updated post",
+                    "value": {
+                      "id": 1,
+                      "title": "Updated Blog Post Title",
+                      "content": "This is the updated content of the blog post."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Post not found - no post exists with the provided ID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "post_not_found": {
+                    "summary": "Post not found",
+                    "value": {
+                      "error": "Post with id 999 not found"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/posts/search": {
+      "get": {
+        "summary": "Search posts",
+        "description": "Search posts by title or content using case-insensitive substring matching. At least one search parameter must be provided.",
+        "tags": ["Posts"],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TitleSearch"
+          },
+          {
+            "$ref": "#/components/parameters/ContentSearch"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of posts matching the search criteria",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Post"
+                  }
+                },
+                "examples": {
+                  "search_results": {
+                    "summary": "Posts found by search",
+                    "value": [
+                      {
+                        "id": 1,
+                        "title": "Flask Tutorial",
+                        "content": "This is a comprehensive guide to Flask development."
+                      }
+                    ]
+                  },
+                  "no_results": {
+                    "summary": "No posts found",
+                    "value": []
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Posts",
+      "description": "Blog post management operations - create, read, update, delete, search, and sort posts"
+    }
+  ]
+}
